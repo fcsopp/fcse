@@ -6,11 +6,14 @@ export function useMigrateLocalData(usuarioId) {
     if (!usuarioId) return;
 
     const migrate = async () => {
+      // Leer datos locales
       const localProgreso = JSON.parse(localStorage.getItem("progreso") || "{}");
       const localObjetivos = JSON.parse(localStorage.getItem("objetivos") || "{}");
 
-      if (!Object.keys(localProgreso).length && !Object.keys(localObjetivos).length) return;
+      // Si no hay nada, salir
+      if (Object.keys(localProgreso).length === 0 && Object.keys(localObjetivos).length === 0) return;
 
+      // Insertar o actualizar en Supabase
       const { error } = await supabase
         .from("users_data")
         .upsert(
@@ -22,9 +25,10 @@ export function useMigrateLocalData(usuarioId) {
           { onConflict: "user_id" }
         );
 
-      if (error) console.error("Error migrando datos:", error);
-      else {
-        console.log("Datos migrados a Supabase correctamente.");
+      if (error) {
+        console.error("Error migrando datos:", error);
+      } else {
+        console.log("Datos migrados correctamente a Supabase:", { localProgreso, localObjetivos });
         // Borrar datos locales después de migrar
         localStorage.removeItem("progreso");
         localStorage.removeItem("objetivos");
