@@ -1,0 +1,16 @@
+[
+  {
+    "user_id": "1234-abcd",
+    "progreso": {
+      "Policía Nacional-1": { "color": "#1e8449", "contador": 3 }
+    },
+    "objetivos": {
+      "Policía Nacional-1": ["Objetivo 1", "Objetivo 2"]
+    }
+  },
+  {
+    "user_id": "5678-efgh",
+    "progreso": {},
+    "objetivos": {}
+  }
+]
