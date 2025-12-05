@@ -8,6 +8,7 @@ import { getUserId } from "./usr/utils/user";
 
 import { temasPoliciaNacional, temasGuardiaCivil, temasFuncionarioPrisiones } from "./temas";
 import { useSyncUserData } from "./hooks/useSyncUserData";
+import { useMigrateLocalData } from "./hooks/useMigrateLocalData";
 
 export default function App() {
   const [pantalla, setPantalla] = useState("inicio");
@@ -20,13 +21,19 @@ export default function App() {
   const [progreso, setProgreso] = useState({});
   const [objetivos, setObjetivos] = useState({});
 
-  // Generar userId
+  // 1️⃣ Generar o recuperar userId
   useEffect(() => {
-    const id = getUserId();
-    setUsuarioId(id);
+    const fetchUserId = async () => {
+      const id = await getUserId();
+      setUsuarioId(id);
+    };
+    fetchUserId();
   }, []);
 
-  // Sincronizar datos con Supabase
+  // 2️⃣ Migrar datos locales a Supabase una sola vez
+  useMigrateLocalData(usuarioId);
+
+  // 3️⃣ Sincronizar datos con Supabase (solo sincronización, ya no maneja migración)
   useSyncUserData(progreso, objetivos, setProgreso, setObjetivos, organizacion);
 
   const abrirBola = (num) => {
