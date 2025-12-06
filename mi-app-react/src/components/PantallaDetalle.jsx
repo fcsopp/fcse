@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import PopupObjetivo from "./PopupObjetivo";
+import useSyncSupabase from "../hooks/useSyncSupabase";
 
 export default function PantallaDetalle({
   temas,
@@ -15,8 +16,9 @@ export default function PantallaDetalle({
   progreso,
   setProgreso,
   setPantalla,
-  añadirObjetivo
+  usuarioId // <-- asegúrate de pasar el usuarioId desde App.jsx
 }) {
+
   const [mostrarPopup, setMostrarPopup] = useState(false);
   const [mostrarConfirmar, setMostrarConfirmar] = useState(false);
   const [objetivoAEliminar, setObjetivoAEliminar] = useState(null);
@@ -24,6 +26,9 @@ export default function PantallaDetalle({
   const claveTema = `${organizacion}-${bolaActiva}`;
   const comentariosTema = objetivos[claveTema] || [];
 
+  /* =======================================================
+     🟡 USE EFFECT: Inicializa progreso si no existe
+  ======================================================= */
   useEffect(() => {
     if (!progreso[claveTema]) {
       const nuevosProgreso = {
@@ -38,6 +43,9 @@ export default function PantallaDetalle({
   const colorBola = progreso[claveTema]?.color || color;
   const contadorBola = progreso[claveTema]?.contador ?? contador;
 
+  /* =======================================================
+     🟦 Función: actualizarProgreso
+  ======================================================= */
   const actualizarProgreso = (nuevoColor, nuevoContador) => {
     const nuevosProgreso = {
       ...progreso,
@@ -50,10 +58,12 @@ export default function PantallaDetalle({
     localStorage.setItem(`progreso-${organizacion}`, JSON.stringify(nuevosProgreso));
   };
 
+  /* =======================================================
+     🎨 CAMBIAR COLOR
+  ======================================================= */
   const cambiarColorBola = (nuevoColor) => {
     let nuevoContador = contadorBola;
     if (nuevoColor === "#444") {
-      // “Sin empezar” reinicia contador
       nuevoContador = 0;
       setContador(0);
     }
@@ -61,6 +71,9 @@ export default function PantallaDetalle({
     cambiarColor(nuevoColor);
   };
 
+  /* =======================================================
+     🔢 CAMBIAR CONTADOR
+  ======================================================= */
   const cambiarContadorBola = (delta) => {
     const nuevoContador = Math.max(0, contadorBola + delta);
     actualizarProgreso(colorBola, nuevoContador);
@@ -68,22 +81,36 @@ export default function PantallaDetalle({
     cambiarContador(delta);
   };
 
+  /* =======================================================
+     🟩 AÑADIR OBJETIVO
+  ======================================================= */
   const añadirObjetivoLocal = (nuevo) => {
-    if (!nuevo.trim() || comentariosTema.length >= 10) return;
+    if (!nuevo.trim()) return;
+    if (comentariosTema.length >= 10) return;
+
     const actualizados = {
       ...objetivos,
       [claveTema]: [...comentariosTema, nuevo.trim()]
     };
+
     setObjetivos(actualizados);
     localStorage.setItem(`objetivos-${organizacion}`, JSON.stringify(actualizados));
-    añadirObjetivo(nuevo);
+
+    // 🔹 CERRAR POPUP AUTOMÁTICAMENTE
+    setMostrarPopup(false);
   };
 
+  /* =======================================================
+     🗑️ PEDIR ELIMINAR OBJETIVO
+  ======================================================= */
   const pedirEliminar = (idx) => {
     setObjetivoAEliminar(idx);
     setMostrarConfirmar(true);
   };
 
+  /* =======================================================
+     🗑️ ELIMINAR OBJETIVO
+  ======================================================= */
   const eliminarObjetivo = () => {
     const actualizados = {
       ...objetivos,
@@ -91,10 +118,14 @@ export default function PantallaDetalle({
     };
     setObjetivos(actualizados);
     localStorage.setItem(`objetivos-${organizacion}`, JSON.stringify(actualizados));
+
     setMostrarConfirmar(false);
     setObjetivoAEliminar(null);
   };
 
+  /* =======================================================
+     🎨 Botones de color
+  ======================================================= */
   const colores = [
     { color: "#1e8449", label: "Dominio absoluto!" },
     { color: "#58d68d", label: "Se defiende." },
@@ -104,6 +135,14 @@ export default function PantallaDetalle({
     { color: "#444", label: "Sin empezar" }
   ];
 
+  /* =======================================================
+     🔹 Sincronización automática con Supabase
+  ======================================================= */
+  useSyncSupabase(usuarioId, progreso, objetivos);
+
+  /* =======================================================
+     🖥️ RENDER
+  ======================================================= */
   return (
     <div className="pantalla-detalle">
       <button
@@ -202,7 +241,10 @@ export default function PantallaDetalle({
       )}
 
       {mostrarPopup && (
-        <PopupObjetivo onClose={() => setMostrarPopup(false)} onAñadir={añadirObjetivoLocal} />
+        <PopupObjetivo
+          onClose={() => setMostrarPopup(false)}
+          onAñadir={añadirObjetivoLocal}
+        />
       )}
 
       {mostrarConfirmar && (
@@ -225,22 +267,32 @@ export default function PantallaDetalle({
           }}>
             <h3 style={{ color: "#000" }}>¿Deseas eliminar este objetivo?</h3>
             <div style={{ marginTop: "20px", display: "flex", justifyContent: "space-around" }}>
-              <button onClick={() => setMostrarConfirmar(false)} style={{
-                backgroundColor: "#ff4d4d",
-                color: "#fff",
-                border: "1px solid #ff4d4d",
-                borderRadius: "4px",
-                padding: "5px 15px",
-                cursor: "pointer"
-              }}>Cancelar</button>
-              <button onClick={eliminarObjetivo} style={{
-                backgroundColor: "#8B0000",
-                color: "#fff",
-                border: "1px solid #8B0000",
-                borderRadius: "4px",
-                padding: "5px 15px",
-                cursor: "pointer"
-              }}>Eliminar</button>
+              <button
+                onClick={() => setMostrarConfirmar(false)}
+                style={{
+                  backgroundColor: "#ff4d4d",
+                  color: "#fff",
+                  border: "1px solid #ff4d4d",
+                  borderRadius: "4px",
+                  padding: "5px 15px",
+                  cursor: "pointer"
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={eliminarObjetivo}
+                style={{
+                  backgroundColor: "#8B0000",
+                  color: "#fff",
+                  border: "1px solid #8B0000",
+                  borderRadius: "4px",
+                  padding: "5px 15px",
+                  cursor: "pointer"
+                }}
+              >
+                Eliminar
+              </button>
             </div>
           </div>
         </div>

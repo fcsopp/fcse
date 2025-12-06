@@ -4,11 +4,10 @@ import PantallaInicio from "./components/PantallaInicio";
 import PantallaPrincipal from "./components/PantallaPrincipal";
 import PantallaDetalle from "./components/PantallaDetalle";
 import { useLocalStorage } from "./hooks/useLocalStorage";
-
-import { db } from "./firebase";
-import { doc, setDoc, getDoc } from "firebase/firestore";
-import { temasPoliciaNacional, temasGuardiaCivil, temasFuncionarioPrisiones } from "./temas";
 import { v4 as uuidv4 } from "uuid";
+
+import { supabase } from "./supabaseClient"; 
+import { temasPoliciaNacional, temasGuardiaCivil, temasFuncionarioPrisiones } from "./temas";
 
 export default function App() {
   const [pantalla, setPantalla] = useState("inicio");
@@ -21,7 +20,7 @@ export default function App() {
   const [progreso, setProgreso] = useLocalStorage("progreso", {});
   const [objetivos, setObjetivos] = useState({});
 
-  // Generar ID único de usuario
+  // Inicializar usuario y sincronizar con Supabase
   useEffect(() => {
     let id = localStorage.getItem("usuarioId");
     if (!id) {
@@ -30,32 +29,88 @@ export default function App() {
     }
     setUsuarioId(id);
 
-    // Cargar datos de Firestore
-    (async () => {
-      if (!organizacion) return;
-      const docSnap = await getDoc(doc(db, "usuarios", id));
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setProgreso(data.progreso || {});
-        setObjetivos(data[`objetivos-${organizacion}`] || {});
+    if (!organizacion) return;
+
+    const initUser = async () => {
+      try {
+        // Comprobar si el usuario existe en Supabase
+        const { data: usuario, error } = await supabase
+          .from("users_data")
+          .select("*")
+          .eq("user_id", id)
+          .single();
+
+        if (error && error.code !== "PGRST116") {
+          console.error("Error al consultar Supabase:", error);
+          return;
+        }
+
+        if (usuario) {
+          // Usuario encontrado en DB → cargar datos
+          setProgreso(usuario.progreso || {});
+          setObjetivos(usuario.objetivos || {});
+        } else {
+          // Usuario NO encontrado → leer localStorage y enviar a DB
+          const progresoLocal = JSON.parse(localStorage.getItem("progreso") || "{}");
+          const objetivosLocal = JSON.parse(localStorage.getItem(`objetivos-${organizacion}`) || "{}");
+
+          await supabase
+            .from("users_data")
+            .insert([{
+              user_id: id,
+              progreso: progresoLocal,
+              objetivos: objetivosLocal,
+              organizacion
+            }]);
+
+          setProgreso(progresoLocal);
+          setObjetivos(objetivosLocal);
+          console.log("✅ Datos locales sincronizados a Supabase");
+        }
+      } catch (err) {
+        console.error("❌ Error al inicializar usuario:", err);
+        const progresoLocal = JSON.parse(localStorage.getItem("progreso") || "{}");
+        const objetivosLocal = JSON.parse(localStorage.getItem(`objetivos-${organizacion}`) || "{}");
+        setProgreso(progresoLocal);
+        setObjetivos(objetivosLocal);
       }
-    })();
+    };
+
+    initUser();
   }, [organizacion]);
 
-  // Guardar datos en Firestore
-  const guardarDatosUsuario = async (nuevosProgreso = progreso, nuevosObjetivos = objetivos) => {
+  // Guardar datos del usuario en Supabase
+  const guardarDatosUsuario = async () => {
     if (!usuarioId || !organizacion) return;
-    await setDoc(
-      doc(db, "usuarios", usuarioId),
-      {
-        progreso: nuevosProgreso,
-        [`objetivos-${organizacion}`]: nuevosObjetivos,
-        organizacion,
-      },
-      { merge: true }
-    );
+
+    try {
+      await supabase
+        .from("users_data")
+        .upsert([{
+          user_id: usuarioId,
+          progreso,
+          objetivos,
+          organizacion
+        }], { onConflict: "user_id" });
+      console.log("✅ Datos guardados en Supabase");
+    } catch (error) {
+      console.error("❌ Error al guardar datos en Supabase:", error);
+    }
   };
 
+  // Guardar automáticamente al cerrar o recargar la página
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      guardarDatosUsuario();
+      // Opcional: mensaje de alerta al usuario
+      // e.preventDefault();
+      // e.returnValue = '';
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [usuarioId, organizacion, progreso, objetivos]);
+
+  // Abrir una bola en detalle
   const abrirBola = (num) => {
     const info = progreso[`${organizacion}-${num}`] || { color: "#444", contador: 0 };
     setBolaActiva(num);
@@ -100,7 +155,7 @@ export default function App() {
           progreso={progreso}
           setProgreso={setProgreso}
           setPantalla={setPantalla}
-          guardarDatosUsuario={guardarDatosUsuario}
+          usuarioId={usuarioId} // <-- importante para sincronización
         />
       )}
     </>
